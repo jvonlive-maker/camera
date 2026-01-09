@@ -1,7 +1,6 @@
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
-local Lighting = game:GetService("Lighting")
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -9,15 +8,9 @@ local playerScripts = player:WaitForChild("PlayerScripts")
 local PlayerModule = require(playerScripts:WaitForChild("PlayerModule"))
 local controls = PlayerModule:GetControls()
 
--- DOF Setup
-local dof = Lighting:FindFirstChild("FreecamDOF") or Instance.new("DepthOfFieldEffect")
-dof.Name = "FreecamDOF"
-dof.Enabled = false
-dof.Parent = Lighting
-
 -- Settings
 local MOVE_SPEED = 0.5
-local PRECISION_SPEED = 0.05 -- Super slow speed for close-ups
+local PRECISION_SPEED = 0.05
 local ROTATION_SPEED = 0.5
 local LERP_SPEED = 0.1
 local SLOW_LERP_SPEED = 0.02
@@ -25,7 +18,7 @@ local FOV_SENSITIVITY = 2
 
 -- State
 local active = false
-local slowMode = false -- This is the ']' weighted toggle
+local slowMode = false
 local currentLerp = LERP_SPEED
 local cameraRotation = Vector2.new(0, 0)
 local cameraLocation = Vector3.new(0, 0, 0)
@@ -54,7 +47,6 @@ end
 local function toggleFreecam(forceOff)
 	if forceOff then active = false else active = not active end
 	
-	dof.Enabled = active
 	if active then
 		controls:Disable()
 		camera.CameraType = Enum.CameraType.Scriptable
@@ -73,7 +65,6 @@ local function toggleFreecam(forceOff)
 	end
 end
 
--- Input Handling
 connections.Input = UserInputService.InputBegan:Connect(function(input, processed)
 	if input.KeyCode == Enum.KeyCode.LeftBracket then
 		toggleFreecam()
@@ -83,12 +74,10 @@ connections.Input = UserInputService.InputBegan:Connect(function(input, processe
 	elseif input.KeyCode == Enum.KeyCode.L then
 		toggleFreecam(true)
 		for _, c in pairs(connections) do c:Disconnect() end
-		dof:Destroy()
 		script:Destroy()
 	end
 end)
 
--- Capture Scroll Wheel for FOV
 connections.Scroll = UserInputService.InputChanged:Connect(function(input)
 	if not active then return end
 	if input.UserInputType == Enum.UserInputType.MouseWheel then
@@ -99,23 +88,21 @@ end)
 RunService.RenderStepped:Connect(function(dt)
 	if not active then return end
 
-	-- Mouse Rotation
+	-- Rotation and Roll
 	local mouseDelta = UserInputService:GetMouseDelta()
 	cameraRotation = cameraRotation - (mouseDelta * ROTATION_SPEED)
-	
-	-- Roll (Z and X keys)
 	if UserInputService:IsKeyDown(Enum.KeyCode.Z) then cameraRoll = cameraRoll + 1
 	elseif UserInputService:IsKeyDown(Enum.KeyCode.X) then cameraRoll = cameraRoll - 1 end
 
-	-- Determine Speed Logic
+	-- Speed Logic
 	local currentMoveSpeed = MOVE_SPEED
 	if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
-		currentMoveSpeed = PRECISION_SPEED -- Slow down for Shift
+		currentMoveSpeed = PRECISION_SPEED
 	elseif slowMode then
-		currentMoveSpeed = MOVE_SPEED * 0.2 -- Slow down for Weighted Mode
+		currentMoveSpeed = MOVE_SPEED * 0.2
 	end
 
-	-- Movement Vector calculation
+	-- Movement
 	local moveDir = Vector3.new()
 	for key, dir in pairs(movementKeys) do
 		if UserInputService:IsKeyDown(key) then moveDir = moveDir + dir end
@@ -124,13 +111,7 @@ RunService.RenderStepped:Connect(function(dt)
 	local rotationCFrame = CFrame.Angles(0, math.rad(cameraRotation.X), 0) * CFrame.Angles(math.rad(cameraRotation.Y), 0, math.rad(cameraRoll))
 	cameraLocation = cameraLocation + (rotationCFrame * moveDir * currentMoveSpeed)
 	
-	-- Apply smooth Lerp
+	-- Update Camera
 	camera.CFrame = camera.CFrame:Lerp(rotationCFrame + cameraLocation, currentLerp)
 	camera.FieldOfView = camera.FieldOfView + (targetFOV - camera.FieldOfView) * currentLerp
-	
-	-- Depth of Field: Automatic background blur
-	local zoomRatio = (1 - (camera.FieldOfView / 70)) 
-	dof.FocusDistance = 15 
-	dof.InFocusRadius = 10 
-	dof.FarIntensity = math.clamp(zoomRatio * 0.8, 0.1, 1)
 end)
